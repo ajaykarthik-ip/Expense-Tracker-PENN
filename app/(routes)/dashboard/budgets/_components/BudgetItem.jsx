@@ -34,12 +34,12 @@ function BudgetItem({ budget }) {
               ${budget.amount - budget.totalSpend} Remaining
             </h2>
           </div>
-          <div className="w-full bg-slate-300 h-2 rounded-full">
+          {/* <div className="w-full bg-slate-300 h-2 rounded-full">
             <div
               className=" bg-primary h-2 rounded-full"
               style={{ width: `${calculateProgressPerc()}%` }}
             ></div>
-          </div>
+          </div> */}
         </div>
       </div>
     </Link>

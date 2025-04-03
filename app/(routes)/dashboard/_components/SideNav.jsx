@@ -37,7 +37,13 @@ function SideNav({ isSideNavOpen, onClose }) {
       id: 4,
       name: "Income",
       icon: TrendingUp,
-      path: "/dashboard/income", // Using the expenses path as requested
+      path: "/dashboard/income", 
+    },    
+    {
+      id: 5,
+      name: "⁠Recurring transactions ",
+      icon: ReceiptText,
+      path: "/dashboard/recurring", 
     },
   ];
 
