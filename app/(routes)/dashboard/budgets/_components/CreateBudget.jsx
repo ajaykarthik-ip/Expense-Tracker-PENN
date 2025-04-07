@@ -1,108 +1,130 @@
 "use client";
 import React, { useState } from "react";
-
-import EmojiPicker from "emoji-picker-react";
-
-import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from "../../../../../components/ui/dialog";
-import { Button } from "../../../../../components/ui/button";
-import { Input } from "../../../../../components/ui/input";
 import { db } from "../../../../../utils/dbConfig";
 import { Budgets } from "../../../../../utils/schema";
 import { useUser } from "@clerk/nextjs";
-function CreateBudget({ refreshData }) {
-  const [emojiIcon, setEmojiIcon] = useState("😀");
-  const [openEmojiPicker, setOpenEmojiPicker] = useState(false);
-  const [name, setName] = useState();
-  const [amount, setAmount] = useState();
+import { toast } from "sonner";
+import { Input } from "../../../../../components/ui/input";
+import { Button } from "../../../../../components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../../../components/ui/alert-dialog";
+
+function CreateBudget({ refreshData, totalIncome, totalExpenses }) {
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
   const { user } = useUser();
 
-  const onCreateBudget = async () => {
-    const result = await db
-      .insert(Budgets)
-      .values({
+  // Format currency for better display in alerts
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const handleBudgetSubmit = () => {
+    // Convert amount to number for calculation
+    const budgetAmount = Number(amount);
+    
+    // Check if this budget would exceed income
+    if (totalExpenses + budgetAmount > totalIncome) {
+      setIsAlertOpen(true);
+      return;
+    }
+    
+    // If budget doesn't exceed income, create it directly
+    createBudget();
+  };
+
+  const createBudget = async () => {
+    if (!name || !amount) return;
+
+    try {
+      await db.insert(Budgets).values({
         name: name,
         amount: amount,
         createdBy: user?.primaryEmailAddress?.emailAddress,
-        icon: emojiIcon,
-      })
-      .returning({ insertedId: Budgets.id });
+      });
 
-    if (result) {
+      toast.success("New Budget Created!");
       refreshData();
-      toast("New Budget Created");
+      
+      // Reset form fields
+      setName("");
+      setAmount("");
+    } catch (error) {
+      console.error("Error creating budget:", error);
+      toast.error("Failed to create budget");
     }
   };
 
+  const confirmBudgetCreation = async () => {
+    await createBudget();
+    setIsAlertOpen(false);
+  };
+
   return (
-    <div>
-      <Dialog>
-        <DialogTrigger asChild>
-          <div className="bg-slate-100 p-10 rounded-md items-center flex flex-col border-2 border-dashed cursor-pointer hover:shadow-md">
-            <h2 className="text-3xl">+</h2>
-            <h2>Create New Budget</h2>
-          </div>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Budget</DialogTitle>
-            <DialogDescription>
-              <div className="mt-5">
-                <Button
-                  variant="outline"
-                  className="text-lg"
-                  onClick={() => setOpenEmojiPicker(!openEmojiPicker)}
-                >
-                  {emojiIcon}
-                </Button>
-                <div className="absolute z-20">
-                  <EmojiPicker
-                    open={openEmojiPicker}
-                    onEmojiClick={(e) => {
-                      setEmojiIcon(e.emoji), setOpenEmojiPicker(false);
-                    }}
-                  />
-                </div>
-                <div className="mt-2">
-                  <h2 className="text-black font-medium my-1">Budget Name</h2>
-                  <Input
-                    placeholder="e.g. Groceries"
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-                <div className="mt-2">
-                  <h2 className="text-black font-medium my-1">Budget Amount</h2>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 5000$"
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="sm:justify-start">
-            <DialogClose asChild>
-              <Button
-                disabled={!(name && amount)}
-                onClick={() => onCreateBudget()}
-                className="mt-5 w-full"
-              >
-                Create Budget
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+    <div className="p-5 border rounded-lg bg-white shadow-sm">
+      <h2 className="font-bold text-lg mb-3">Create New Budget</h2>
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-black font-medium mb-1">Budget Name</h2>
+          <Input
+            value={name}
+            placeholder="e.g. Groceries"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <h2 className="text-black font-medium mb-1">Budget Amount</h2>
+          <Input
+            value={amount}
+            type="number"
+            placeholder="e.g. 500"
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+        <Button
+          disabled={!(name && amount)}
+          onClick={handleBudgetSubmit}
+          className="w-full"
+        >
+          Create Budget
+        </Button>
+      </div>
+
+      {/* Alert Dialog for over-budget warning */}
+      <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Budget Exceeds Income</AlertDialogTitle>
+            <AlertDialogDescription>
+              <p>This budget of {formatCurrency(Number(amount))} will cause your total planned expenses to exceed your total income.</p>
+              <p className="mt-2">
+                Current Income: {formatCurrency(totalIncome)}<br />
+                Current Expenses: {formatCurrency(totalExpenses)}<br />
+                New Total Expenses: {formatCurrency(totalExpenses + Number(amount))}
+              </p>
+              <p className="mt-2">Do you still want to create this budget?</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBudgetCreation} className="bg-red-600 hover:bg-red-700">
+              Create Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

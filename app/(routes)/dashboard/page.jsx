@@ -8,12 +8,15 @@ import { Budgets, expenses, incomes, incomeEntries } from "../../../utils/schema
 import { desc, eq, getTableColumns, sql } from "drizzle-orm";
 import BudgetItem from "./budgets/_components/BudgetItem";
 import ExpenseListTable from "./expenses/_components/ExpenseListTable";
+import AddExpense from "./expenses/_components/AddExpense"; // Import the AddExpense component if needed
 
 function Dashboard() {
   const [budgetList, setBudgetList] = useState([]);
   const [expensesList, setExpensesList] = useState([]);
   const [incomeList, setIncomeList] = useState([]);
   const [totalIncome, setTotalIncome] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [savings, setSavings] = useState(0); // Added savings state
   const [incomeSource, setIncomeSource] = useState(null);
   const { user } = useUser();
 
@@ -23,6 +26,12 @@ function Dashboard() {
       getIncomeData();
     }
   }, [user]);
+
+  // Update savings whenever income or expenses change
+  useEffect(() => {
+    const calculatedSavings = totalIncome - totalExpenses;
+    setSavings(calculatedSavings);
+  }, [totalIncome, totalExpenses]);
 
   const getBudgetList = async () => {
     const result = await db
@@ -53,7 +62,12 @@ function Dashboard() {
       .rightJoin(expenses, eq(Budgets.id, expenses.budgetId))
       .where(eq(Budgets.createdBy, user?.primaryEmailAddress.emailAddress))
       .orderBy(desc(expenses.id));
+    
     setExpensesList(result);
+    
+    // Calculate and update total expenses
+    const total = result.reduce((total, expense) => total + Number(expense.amount), 0);
+    setTotalExpenses(total);
   };
 
   const getIncomeData = async () => {
@@ -141,11 +155,11 @@ function Dashboard() {
     return iconMap[category] || iconMap.other;
   }
 
-  // Calculate total expenses
-  const totalExpenses = expensesList.reduce((total, expense) => total + Number(expense.amount), 0);
-  
-  // Calculate savings (income - expenses)
-  const savings = totalIncome - totalExpenses;
+  // This section now uses state variables
+  const refreshData = () => {
+    getBudgetList();
+    getIncomeData();
+  };
 
   return (
     <div className="p-8">
@@ -211,8 +225,21 @@ function Dashboard() {
           <h2 className="font-bold text-lg mt-5">Latest Expenses</h2>
           <ExpenseListTable
             expensesList={expensesList}
-            refreshData={() => getBudgetList()}
+            refreshData={refreshData}
           />
+          
+          {/* Add Expense with income check */}
+          {budgetList.length > 0 && (
+            <div className="mt-5">
+              <AddExpense 
+                budgetId={budgetList[0].id} 
+                user={user} 
+                refreshData={refreshData}
+                totalIncome={totalIncome}
+                totalExpenses={totalExpenses}
+              />
+            </div>
+          )}
         </div>
         
         <div className="">
