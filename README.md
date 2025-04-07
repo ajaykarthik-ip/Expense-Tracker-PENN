@@ -47,9 +47,6 @@ PostgreSQL
 
 **1) Clone the repository:**
 
-git clone https://github.com/soumilaggarwal2003/Expense-Tracker
-
-cd expense-tracker
 
 **2) Install dependencies:**
 
