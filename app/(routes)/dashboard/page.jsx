@@ -228,7 +228,7 @@ function Dashboard() {
             refreshData={refreshData}
           />
           
-          {/* Add Expense with income check */}
+          {/* Add Expense with income check
           {budgetList.length > 0 && (
             <div className="mt-5">
               <AddExpense 
@@ -239,7 +239,7 @@ function Dashboard() {
                 totalExpenses={totalExpenses}
               />
             </div>
-          )}
+          )} */}
         </div>
         
         <div className="">

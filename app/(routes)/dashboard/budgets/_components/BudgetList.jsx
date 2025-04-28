@@ -6,6 +6,21 @@ import { useUser } from "@clerk/nextjs";
 import { Budgets, expenses, incomes, incomeEntries } from "../../../../../utils/schema";
 import { db } from "../../../../../utils/dbConfig";
 import { Button } from "../../../../../components/ui/button";
+import { 
+  PlusCircle, 
+  DollarSign, 
+  CreditCard, 
+  PiggyBank, 
+  BarChart, 
+  Grid, 
+  List, 
+  RefreshCw, 
+  Trash2, 
+  X,
+  AlertCircle,
+  CheckCircle,
+  Clock
+} from "lucide-react";
 
 function BudgetList() {
   const [budgetList, setBudgetList] = useState([]);
@@ -17,6 +32,7 @@ function BudgetList() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeView, setActiveView] = useState("grid");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { user } = useUser();
   
@@ -39,6 +55,14 @@ function BudgetList() {
       getIncomeData()
     ]);
     setIsLoading(false);
+  };
+
+  const refreshAllData = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 600); // Show refresh animation for at least 600ms for better UX
   };
 
   const getBudgetList = async () => {
@@ -147,18 +171,43 @@ function BudgetList() {
 
   // Get financial health status
   const getFinancialHealthStatus = () => {
-    if (totalIncome === 0) return { label: "No Income", color: "bg-gray-500", textColor: "text-white" };
+    if (totalIncome === 0) return { 
+      label: "No Income", 
+      color: "bg-gray-500", 
+      textColor: "text-white",
+      icon: <Clock size={14} className="mr-1" />
+    };
     
     const ratio = totalExpenses / totalIncome;
     
     if (ratio > 1) {
-      return { label: "Over Budget", color: "bg-red-600", textColor: "text-white" };
+      return { 
+        label: "Over Budget", 
+        color: "bg-red-600", 
+        textColor: "text-white",
+        icon: <AlertCircle size={14} className="mr-1" />
+      };
     } else if (ratio > 0.9) {
-      return { label: "At Risk", color: "bg-amber-500", textColor: "text-white" };
+      return { 
+        label: "At Risk", 
+        color: "bg-amber-500", 
+        textColor: "text-white",
+        icon: <AlertCircle size={14} className="mr-1" />
+      };
     } else if (ratio > 0.7) {
-      return { label: "Caution", color: "bg-amber-300", textColor: "text-black" };
+      return { 
+        label: "Caution", 
+        color: "bg-amber-300", 
+        textColor: "text-black",
+        icon: <Clock size={14} className="mr-1" />
+      };
     } else {
-      return { label: "Healthy", color: "bg-green-500", textColor: "text-white" };
+      return { 
+        label: "Healthy", 
+        color: "bg-green-500", 
+        textColor: "text-white",
+        icon: <CheckCircle size={14} className="mr-1" />
+      };
     }
   };
 
@@ -172,67 +221,78 @@ function BudgetList() {
   const budgetProgress = getBudgetProgress();
 
   // Get the appropriate icon based on budget category
-  const getBudgetTypeIcon = (name) => {
+  const getBudgetIcon = (name) => {
     const lowerName = name ? name.toLowerCase() : '';
     
     if (lowerName.includes('income') || lowerName.includes('freelance') || lowerName.includes('investment')) {
-      return "💰";
+      return <DollarSign size={18} className="text-green-500" />;
+    } else if (lowerName.includes('food') || lowerName.includes('groceries') || lowerName.includes('restaurant')) {
+      return <CreditCard size={18} className="text-amber-500" />;
+    } else if (lowerName.includes('saving') || lowerName.includes('emergency')) {
+      return <PiggyBank size={18} className="text-blue-500" />;
     } else if (lowerName.includes('business') || lowerName.includes('recurring')) {
-      return "📊";
+      return <BarChart size={18} className="text-purple-500" />;
     } else {
-      return "📊";
+      return <BarChart size={18} className="text-gray-500" />;
     }
   };
 
-  // Budget card component with strict sizing and consistent layout
+  // Budget card component with improved styling
   const BudgetCard = ({ budget }) => {
     const totalSpent = budget.totalSpend || 0;
     const remaining = Number(budget.amount) - totalSpent;
     const usagePercent = Math.min(Math.round((totalSpent / Number(budget.amount)) * 100), 100) || 0;
     const isOverBudget = remaining < 0;
     
-    // Determine icon for this budget
-    const icon = getBudgetTypeIcon(budget.name);
+    // Determine progress color
+    let progressColor = "bg-green-500";
+    if (usagePercent > 90) progressColor = "bg-red-500";
+    else if (usagePercent > 70) progressColor = "bg-amber-500";
     
     return (
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-100 h-[190px] flex flex-col">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 hover:shadow-md transition-shadow h-[210px] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-gray-100">
           <div className="flex items-center">
-            <div className="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 mr-3">
-              {icon}
+            <div className="h-9 w-9 flex items-center justify-center rounded-full bg-blue-50 mr-3">
+              {getBudgetIcon(budget.name)}
             </div>
-            <p className="font-medium text-gray-800 truncate w-24">{budget.name}</p>
+            <div>
+              <p className="font-medium text-gray-800 truncate w-32">{budget.name}</p>
+              <p className="text-xs text-gray-500">{budget.totalItem || 0} transactions</p>
+            </div>
           </div>
-          <p className="text-base font-bold text-blue-600">{formatCurrency(budget.amount)}</p>
+          <div className="text-right">
+            <p className="text-base font-bold text-blue-600">{formatCurrency(budget.amount)}</p>
+            <p className="text-xs text-gray-500">Budget limit</p>
+          </div>
         </div>
         
         <div className="p-4 flex-1 flex flex-col justify-between">
           <div>
-            <div className="flex justify-between mb-1">
-              <p className="text-sm text-gray-500">{budget.totalItem || 0} items</p>
-              <p className="text-sm font-medium text-gray-700">{usagePercent}% used</p>
+            <div className="flex justify-between mb-1.5">
+              <p className="text-sm text-gray-600">Budget Usage</p>
+              <p className="text-sm font-medium text-gray-700">{usagePercent}%</p>
             </div>
             
-            <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
+            <div className="w-full bg-gray-100 rounded-full h-2 mb-3">
               <div 
-                className={`h-1.5 rounded-full ${
-                  usagePercent >= 100 ? 'bg-red-600' : 
-                  usagePercent > 70 ? 'bg-amber-500' : 
-                  'bg-green-600'
-                }`}
+                className={`h-2 rounded-full ${progressColor}`}
                 style={{ width: `${usagePercent}%` }}
               ></div>
             </div>
-          </div>
-          
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">{formatCurrency(totalSpent)}</span> spent
-            </div>
-            <div className="text-sm">
-              <span className={`font-medium ${isOverBudget ? 'text-red-600' : 'text-gray-800'}`}>
-                {formatCurrency(remaining)}
-              </span> remaining
+            
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div className="bg-blue-50 rounded-lg p-2">
+                <p className="text-xs text-gray-500 mb-1">Spent</p>
+                <p className="text-sm font-medium text-gray-800">{formatCurrency(totalSpent)}</p>
+              </div>
+              
+              <div className={`rounded-lg p-2 ${isOverBudget ? 'bg-red-50' : 'bg-green-50'}`}>
+                <p className="text-xs text-gray-500 mb-1">Remaining</p>
+                <p className={`text-sm font-medium ${isOverBudget ? 'text-red-600' : 'text-green-600'}`}>
+                  {formatCurrency(remaining)}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -240,30 +300,43 @@ function BudgetList() {
     );
   };
 
-  // Loading skeleton card with exact same dimensions
+  // Loading skeleton card with improved styling
   const LoadingSkeletonCard = () => {
     return (
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-100 h-[190px] flex flex-col">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 h-[210px] flex flex-col">
         <div className="p-4 flex justify-between items-center border-b border-gray-100">
           <div className="flex items-center">
-            <div className="h-8 w-8 bg-gray-100 rounded-full animate-pulse mr-3"></div>
-            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-9 w-9 bg-gray-100 rounded-full animate-pulse mr-3"></div>
+            <div>
+              <div className="h-4 w-24 bg-gray-100 rounded animate-pulse mb-1"></div>
+              <div className="h-3 w-16 bg-gray-100 rounded animate-pulse"></div>
+            </div>
           </div>
-          <div className="h-5 w-16 bg-gray-200 rounded animate-pulse"></div>
+          <div className="text-right">
+            <div className="h-5 w-16 bg-gray-100 rounded animate-pulse mb-1"></div>
+            <div className="h-3 w-12 bg-gray-100 rounded animate-pulse"></div>
+          </div>
         </div>
         
         <div className="p-4 flex-1 flex flex-col justify-between">
           <div>
             <div className="flex justify-between mb-3">
-              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
-              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-4 w-20 bg-gray-100 rounded animate-pulse"></div>
+              <div className="h-4 w-10 bg-gray-100 rounded animate-pulse"></div>
             </div>
-            <div className="h-1.5 bg-gray-200 rounded-full w-full mb-5 animate-pulse"></div>
-          </div>
-          
-          <div className="flex justify-between items-center">
-            <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-2 bg-gray-100 rounded-full w-full mb-4 animate-pulse"></div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-50 rounded-lg p-2">
+                <div className="h-3 w-12 bg-gray-100 rounded animate-pulse mb-1"></div>
+                <div className="h-4 w-16 bg-gray-100 rounded animate-pulse"></div>
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-2">
+                <div className="h-3 w-12 bg-gray-100 rounded animate-pulse mb-1"></div>
+                <div className="h-4 w-16 bg-gray-100 rounded animate-pulse"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -275,15 +348,15 @@ function BudgetList() {
     if (!isModalOpen) return null;
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-bold text-gray-800">Create New Budget</h2>
             <button 
               onClick={() => setIsModalOpen(false)}
-              className="text-gray-500 hover:text-gray-700"
+              className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500"
             >
-              ✕
+              <X size={18} />
             </button>
           </div>
           <div className="p-6">
@@ -299,48 +372,87 @@ function BudgetList() {
   };
 
   return (
-    <div>
+    <div className="max-w-screen-2xl mx-auto">
       {/* Financial Overview Section */}
       <div className="mb-8 bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-100">
-          <h2 className="font-bold text-lg">Budget Overview</h2>
-          <p className="text-gray-500 text-sm">Manage and track your budgets</p>
+        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-xl text-gray-800">Budget Overview</h2>
+            <p className="text-gray-500 text-sm">Manage and track your financial progress</p>
+          </div>
+          
+          <button 
+            onClick={refreshAllData}
+            className={`h-9 w-9 flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors ${refreshing ? 'animate-spin' : ''}`}
+            disabled={refreshing}
+          >
+            <RefreshCw size={18} />
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-          <div className="p-5">
-            <h3 className="text-sm font-medium text-gray-500">Total Income</h3>
-            <p className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(totalIncome)}</p>
-            <div className="mt-2 text-xs text-gray-500">
-              {incomeSource ? `Primary: ${incomeSource.name}` : "No income source"}
+          <div className="p-6">
+            <div className="flex items-center mb-2">
+              <div className="h-8 w-8 flex items-center justify-center rounded-full bg-green-50 text-green-600 mr-3">
+                <DollarSign size={18} />
+              </div>
+              <h3 className="text-sm font-medium text-gray-700">Total Income</h3>
+            </div>
+            <p className="text-2xl font-bold text-green-600 mb-1">{formatCurrency(totalIncome)}</p>
+            <div className="text-xs text-gray-500 flex items-center">
+              {incomeSource ? (
+                <>
+                  <DollarSign size={12} className="mr-1" />
+                  <span>{incomeSource.name}</span>
+                </>
+              ) : "No income source added"}
             </div>
           </div>
           
-          <div className="p-5">
-            <h3 className="text-sm font-medium text-gray-500">Total Expenses</h3>
-            <p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(totalExpenses)}</p>
-            <div className="mt-2 text-xs text-gray-500">
-              {budgetList.length} active budget{budgetList.length !== 1 ? 's' : ''}
+          <div className="p-6">
+            <div className="flex items-center mb-2">
+              <div className="h-8 w-8 flex items-center justify-center rounded-full bg-red-50 text-red-600 mr-3">
+                <CreditCard size={18} />
+              </div>
+              <h3 className="text-sm font-medium text-gray-700">Total Expenses</h3>
+            </div>
+            <p className="text-2xl font-bold text-red-600 mb-1">{formatCurrency(totalExpenses)}</p>
+            <div className="text-xs text-gray-500 flex items-center">
+              <BarChart size={12} className="mr-1" />
+              <span>
+                {budgetList.length} active budget{budgetList.length !== 1 ? 's' : ''}
+              </span>
             </div>
           </div>
           
-          <div className="p-5">
-            <h3 className="text-sm font-medium text-gray-500">Savings</h3>
-            <p className={`text-2xl font-bold mt-1 ${savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+          <div className="p-6">
+            <div className="flex items-center mb-2">
+              <div className="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 mr-3">
+                <PiggyBank size={18} />
+              </div>
+              <h3 className="text-sm font-medium text-gray-700">Savings</h3>
+            </div>
+            <p className={`text-2xl font-bold mb-1 ${savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
               {formatCurrency(savings)}
             </p>
-            <div className="mt-2 text-xs">
-              <span className={`inline-block px-2 py-1 rounded-full ${healthStatus.color} ${healthStatus.textColor}`}>
+            <div className="text-xs flex items-center">
+              <span className={`inline-flex items-center px-2 py-1 rounded-full ${healthStatus.color} ${healthStatus.textColor}`}>
+                {healthStatus.icon}
                 {healthStatus.label}
               </span>
             </div>
           </div>
           
-          <div className="p-5">
-            <h3 className="text-sm font-medium text-gray-500">Budget Usage</h3>
-            <p className="text-2xl font-bold text-gray-800 mt-1">{budgetProgress}%</p>
+          <div className="p-6">
+            <div className="flex items-center mb-2">
+              <div className="h-8 w-8 flex items-center justify-center rounded-full bg-purple-50 text-purple-600 mr-3">
+                <BarChart size={18} />
+              </div>
+              <h3 className="text-sm font-medium text-gray-700">Budget Usage</h3>
+            </div>
+            <p className="text-2xl font-bold text-gray-800 mb-1">{budgetProgress}%</p>
             
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+            <div className="w-full bg-gray-100 rounded-full h-2.5 mb-1.5">
               <div 
                 className={`h-2.5 rounded-full ${
                   budgetProgress > 90 ? 'bg-red-600' : 
@@ -350,7 +462,7 @@ function BudgetList() {
                 style={{ width: `${budgetProgress}%` }}
               ></div>
             </div>
-            <div className="mt-2 text-xs text-gray-500">
+            <div className="text-xs text-gray-500">
               {formatCurrency(totalExpenses)} of {formatCurrency(totalIncome)}
             </div>
           </div>
@@ -358,43 +470,46 @@ function BudgetList() {
       </div>
 
       {/* View Selector and Add Budget Button */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center space-x-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-4">
           <div className="bg-white rounded-lg shadow-sm overflow-hidden flex">
             <button 
               onClick={() => setActiveView("grid")}
-              className={`px-4 py-2 text-sm font-medium transition ${activeView === "grid" 
+              className={`px-4 py-2 text-sm font-medium transition flex items-center ${activeView === "grid" 
                 ? 'bg-blue-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
-              Grid View
+              <Grid size={16} className="mr-1.5" />
+              Grid
             </button>
             <button 
               onClick={() => setActiveView("list")}
-              className={`px-4 py-2 text-sm font-medium transition ${activeView === "list" 
+              className={`px-4 py-2 text-sm font-medium transition flex items-center ${activeView === "list" 
                 ? 'bg-blue-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
-              List View
+              <List size={16} className="mr-1.5" />
+              List
             </button>
           </div>
           
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-colors"
           >
-            <span className="mr-1">+</span> New Budget
+            <PlusCircle size={16} className="mr-1.5" />
+            New Budget
           </button>
         </div>
         
-        <div className="text-sm text-gray-600 font-medium">
-          {budgetList.length} budget{budgetList.length !== 1 ? 's' : ''} • {formatCurrency(totalBudgetAllocated)} allocated
+        <div className="text-sm text-gray-600 font-medium bg-white py-1.5 px-3 rounded-lg shadow-sm border border-gray-100">
+          <span className="text-blue-600 font-bold">{formatCurrency(totalBudgetAllocated)}</span> allocated across {budgetList.length} budget{budgetList.length !== 1 ? 's' : ''}
         </div>
       </div>
 
       {/* Grid View */}
       {activeView === "grid" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {isLoading ? (
             // Loading skeletons with consistent sizing
             Array(8).fill().map((_, index) => (
@@ -406,21 +521,22 @@ function BudgetList() {
               <BudgetCard key={index} budget={budget} />
             ))
           ) : (
-            <div className="col-span-full bg-white p-8 rounded-lg shadow-sm text-center border border-gray-100">
+            <div className="col-span-full bg-white p-8 rounded-xl shadow-sm text-center border border-gray-100">
               <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600 mb-4">
-                <span className="text-4xl">🏦</span>
+                <PiggyBank size={32} />
               </div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">No Budgets Yet</h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-gray-500 mb-4 max-w-md mx-auto">
                 Create your first budget to start managing your finances effectively.
               </p>
-              <p className="text-sm text-gray-400 mb-6">
+              <p className="text-sm text-gray-400 mb-6 max-w-md mx-auto">
                 Budgets help you plan your spending and track your financial goals.
               </p>
               <button 
                 onClick={() => setIsModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors flex items-center mx-auto"
               >
+                <PlusCircle size={16} className="mr-1.5" />
                 Create Your First Budget
               </button>
             </div>
@@ -430,7 +546,7 @@ function BudgetList() {
 
       {/* List View */}
       {activeView === "list" && (
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-100">
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
           {isLoading ? (
             <div className="p-5">
               <div className="space-y-4">
@@ -444,11 +560,11 @@ function BudgetList() {
               <table className="w-full text-left">
                 <thead className="bg-gray-50 border-y border-gray-100">
                   <tr>
-                    <th className="p-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Budget Name</th>
-                    <th className="p-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="p-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Spent</th>
-                    <th className="p-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
-                    <th className="p-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
+                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Budget Name</th>
+                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Spent</th>
+                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
+                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -460,30 +576,40 @@ function BudgetList() {
                     
                     return (
                       <tr key={index} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 mr-2">
-                              <span>{getBudgetTypeIcon(budget.name)}</span>
+                            <div className="h-9 w-9 flex items-center justify-center rounded-full bg-blue-50 mr-3">
+                              {getBudgetIcon(budget.name)}
                             </div>
-                            <div className="font-medium text-gray-800">{budget.name}</div>
+                            <div>
+                              <div className="font-medium text-gray-800">{budget.name}</div>
+                              <div className="text-xs text-gray-500">{budget.totalItem || 0} transactions</div>
+                            </div>
                           </div>
                         </td>
-                        <td className="p-4 whitespace-nowrap font-medium text-blue-600">
-                          {formatCurrency(budget.amount)}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="font-medium text-blue-600">{formatCurrency(budget.amount)}</div>
+                          <div className="text-xs text-gray-500">Budget limit</div>
                         </td>
-                        <td className="p-4 whitespace-nowrap text-gray-600">
-                          {formatCurrency(totalSpent)}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-gray-700">{formatCurrency(totalSpent)}</div>
+                          <div className="text-xs text-gray-500">
+                            {usagePercent}% of total
+                          </div>
                         </td>
-                        <td className="p-4 whitespace-nowrap font-medium">
-                          <span className={isOverBudget ? 'text-red-600' : 'text-gray-800'}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`font-medium ${isOverBudget ? 'text-red-600' : 'text-green-600'}`}>
                             {formatCurrency(remaining)}
                           </span>
+                          <div className="text-xs text-gray-500">
+                            {isOverBudget ? 'Over budget' : 'Available'}
+                          </div>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 mr-2 max-w-28">
+                            <div className="w-full bg-gray-200 rounded-full h-2 mr-3 max-w-28">
                               <div 
-                                className={`h-1.5 rounded-full ${
+                                className={`h-2 rounded-full ${
                                   usagePercent >= 100 ? 'bg-red-600' : 
                                   usagePercent > 70 ? 'bg-amber-500' : 
                                   'bg-green-600'
@@ -491,7 +617,7 @@ function BudgetList() {
                                 style={{ width: `${usagePercent}%` }}
                               ></div>
                             </div>
-                            <span className="text-xs font-medium text-gray-600">{usagePercent}%</span>
+                            <span className="text-xs font-medium text-gray-600 w-8">{usagePercent}%</span>
                           </div>
                         </td>
                       </tr>
@@ -503,19 +629,20 @@ function BudgetList() {
           ) : (
             <div className="p-8 text-center">
               <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600 mb-4">
-                <span className="text-4xl">🏦</span>
+                <PiggyBank size={32} />
               </div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">No Budgets Yet</h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-gray-500 mb-4 max-w-md mx-auto">
                 Create your first budget to start managing your finances effectively.
               </p>
-              <p className="text-sm text-gray-400 mb-6">
+              <p className="text-sm text-gray-400 mb-6 max-w-md mx-auto">
                 Tracking your budgets helps you stay on top of your financial goals.
               </p>
               <button 
                 onClick={() => setIsModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center mx-auto"
               >
+                <PlusCircle size={16} className="mr-1.5" />
                 Create Your First Budget
               </button>
             </div>
@@ -525,6 +652,16 @@ function BudgetList() {
 
       {/* Create Budget Modal */}
       <CreateBudgetModal />
+      
+      <style jsx>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: scale(0.98); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
