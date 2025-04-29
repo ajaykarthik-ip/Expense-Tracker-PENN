@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import CreateBudget from "./CreateBudget";
 import { eq, getTableColumns, sql, desc } from "drizzle-orm";
 import { useUser } from "@clerk/nextjs";
 import { Budgets, expenses, incomes, incomeEntries } from "../../../../../utils/schema";
@@ -33,6 +32,14 @@ function BudgetList() {
   const [activeView, setActiveView] = useState("grid");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Form state for budget creation
+  const [budgetName, setBudgetName] = useState("");
+  const [budgetAmount, setBudgetAmount] = useState("");
+  const [budgetDescription, setBudgetDescription] = useState("");
+  const [formError, setFormError] = useState("");
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { user } = useUser();
   
@@ -167,6 +174,91 @@ function BudgetList() {
     await loadAllData();
     // Close modal after successful creation
     setIsModalOpen(false);
+  };
+  
+  // Validate budget amount against available balance
+  const validateBudgetAmount = (amount) => {
+    // Clear previous errors
+    setFormError("");
+    setShowConfirmation(false);
+    
+    // Check if value is a valid number
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      setFormError("Please enter a valid positive amount");
+      return false;
+    }
+    
+    // Calculate available balance
+    const availableBalance = totalIncome - totalExpenses;
+    
+    // Check if amount exceeds available balance
+    if (numericAmount > availableBalance) {
+      setShowConfirmation(true);
+      return false;
+    }
+    
+    return true;
+  };
+  
+  // Handle amount change with validation - no longer needed as handling in input onChange
+  const handleBudgetAmountChange = (e) => {
+    const value = e.target.value;
+    setBudgetAmount(value);
+    
+    // Validate on input change for immediate feedback
+    if (value) validateBudgetAmount(value);
+  };
+  
+  const handleCreateBudget = async (e, isConfirmed = false) => {
+    e.preventDefault();
+    
+    if (!budgetName.trim()) {
+      setFormError("Budget name is required");
+      return;
+    }
+    
+    // Skip validation if already confirmed
+    if (!isConfirmed) {
+      // Validate amount before submission
+      if (!budgetAmount || !validateBudgetAmount(budgetAmount)) {
+        // If there's a confirmation needed and user hasn't confirmed yet
+        if (showConfirmation) {
+          return; // Stop here and wait for confirmation
+        }
+      }
+    }
+    
+    try {
+      setIsSubmitting(true);
+      
+      // Format the amount to ensure it's a number
+      const formattedAmount = parseFloat(parseFloat(budgetAmount).toFixed(2));
+      
+      // Insert new budget into database
+      await db.insert(Budgets).values({
+        name: budgetName,
+        amount: formattedAmount,
+        description: budgetDescription.trim() || null,
+        createdBy: user.primaryEmailAddress.emailAddress,
+        createdAt: new Date(),
+      });
+      
+      // Reset form and refresh data
+      setBudgetName("");
+      setBudgetAmount("");
+      setBudgetDescription("");
+      setFormError("");
+      setShowConfirmation(false);
+      
+      // Refresh the budget list and close modal
+      refreshData();
+    } catch (error) {
+      console.error("Error creating budget:", error);
+      setFormError("An error occurred while creating the budget. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Get financial health status
@@ -343,28 +435,231 @@ function BudgetList() {
     );
   };
 
-  // Modal component for Create Budget
+  // Simple Budget Modal - brand new implementation
   const CreateBudgetModal = () => {
     if (!isModalOpen) return null;
     
+    // Local state for form - completely isolated from parent component
+    const [localState, setLocalState] = useState({
+      name: "",
+      amount: "",
+      description: ""
+    });
+    
+    const [localError, setLocalError] = useState("");
+    const [localConfirm, setLocalConfirm] = useState(false);
+    const [localSubmitting, setLocalSubmitting] = useState(false);
+    
+    // Calculate available balance
+    const availableBalance = totalIncome - totalExpenses;
+    
+    // Format currency without any performance issues
+    const formatCurrencyValue = (value) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+      }).format(value);
+    };
+    
+    // Change handler that won't interfere with typing
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setLocalState(prev => ({
+        ...prev,
+        [name]: value
+      }));
+      
+      // Clear any errors/confirmations when user is typing
+      setLocalError("");
+      setLocalConfirm(false);
+    };
+    
+    // Handle form submission
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      
+      // Basic validation
+      if (!localState.name.trim()) {
+        setLocalError("Budget name is required");
+        return;
+      }
+      
+      const amountValue = parseFloat(localState.amount);
+      if (isNaN(amountValue) || amountValue <= 0) {
+        setLocalError("Please enter a valid amount");
+        return;
+      }
+      
+      // Check if exceeds available balance
+      if (amountValue > availableBalance && !localConfirm) {
+        setLocalConfirm(true);
+        return;
+      }
+      
+      try {
+        setLocalSubmitting(true);
+        
+        // Save to database
+        await db.insert(Budgets).values({
+          name: localState.name.trim(),
+          amount: amountValue,
+          description: localState.description.trim() || null,
+          createdBy: user.primaryEmailAddress.emailAddress,
+          createdAt: new Date()
+        });
+        
+        // Close modal and refresh data
+        setIsModalOpen(false);
+        refreshData();
+      } catch (error) {
+        console.error("Error creating budget:", error);
+        setLocalError("Failed to create budget. Please try again.");
+      } finally {
+        setLocalSubmitting(false);
+      }
+    };
+    
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fade-in">
-        <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-bold text-gray-800">Create New Budget</h2>
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500"
-            >
-              <X size={18} />
-            </button>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div 
+          className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-blue-600 px-6 py-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">Create New Budget</h2>
+              <button 
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="text-white hover:text-blue-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
+          
+          {/* Form */}
           <div className="p-6">
-            <CreateBudget 
-              refreshData={refreshData} 
-              totalIncome={totalIncome} 
-              totalExpenses={totalExpenses}
-            />
+            <form onSubmit={handleSubmit}>
+              {/* Available Balance */}
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-5">
+                <div className="flex items-center">
+                  <PiggyBank className="text-blue-600 mr-2" size={20} />
+                  <span className="text-sm font-medium text-gray-700">Available Balance:</span>
+                </div>
+                <p className="text-2xl font-bold text-blue-700 mt-1">
+                  {formatCurrencyValue(availableBalance)}
+                </p>
+              </div>
+              
+              {/* Budget Name */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Budget Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={localState.name}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="e.g., Groceries, Rent, Entertainment"
+                />
+              </div>
+              
+              {/* Budget Amount */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Budget Amount
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-500">$</span>
+                  <input
+                    type="number"
+                    name="amount"
+                    value={localState.amount}
+                    onChange={handleChange}
+                    className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+              
+              {/* Description */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description (Optional)
+                </label>
+                <textarea
+                  name="description"
+                  value={localState.description}
+                  onChange={handleChange}
+                  rows="3"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Add additional details about this budget"
+                ></textarea>
+              </div>
+              
+              {/* Error Message */}
+              {localError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center mb-4">
+                  <AlertCircle size={18} className="mr-2 flex-shrink-0" />
+                  <p className="text-sm">{localError}</p>
+                </div>
+              )}
+              
+              {/* Confirmation */}
+              {localConfirm && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg mb-4">
+                  <div className="flex items-start">
+                    <AlertCircle size={18} className="mr-2 mt-0.5 text-amber-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        Are you sure you want to add this? The amount exceeds your available balance.
+                      </p>
+                      <div className="flex space-x-3 mt-3">
+                        <button 
+                          type="button" 
+                          className="px-3 py-1.5 text-sm border border-amber-300 text-amber-800 rounded-md hover:bg-amber-100"
+                          onClick={() => setLocalConfirm(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={handleSubmit}
+                          className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded-md hover:bg-amber-700"
+                        >
+                          Confirm Anyway
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Submit Button */}
+              {!localConfirm && (
+                <button
+                  type="submit"
+                  disabled={localSubmitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-70 flex items-center justify-center"
+                >
+                  {localSubmitting ? (
+                    <>
+                      <RefreshCw size={18} className="mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Budget"
+                  )}
+                </button>
+              )}
+            </form>
           </div>
         </div>
       </div>
