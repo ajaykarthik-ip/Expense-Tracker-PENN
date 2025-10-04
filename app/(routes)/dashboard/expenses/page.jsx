@@ -5,7 +5,7 @@ import { db } from "../../../../utils/dbConfig";
 import { Budgets, expenses } from "../../../../utils/schema";
 import { desc, eq, getTableColumns, sql } from "drizzle-orm";
 import ExpenseListTable from "./_components/ExpenseListTable";
-import { PlusCircle, Filter, ArrowUpDown, RefreshCw, AlertCircle, Check, X } from "lucide-react";
+import { PlusCircle, Filter, ArrowUpDown, RefreshCw, AlertCircle, Check, X, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
 
 function ExpensesPage() {
   const [budgetList, setBudgetList] = useState([]);
@@ -14,16 +14,21 @@ function ExpensesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const { user } = useUser();
-  
+
   // Form state
   const [expenseName, setExpenseName] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  
+
   // Modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingSubmission, setPendingSubmission] = useState(null);
+
+  // Image upload state
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
   
   useEffect(() => {
     if (user) {
@@ -190,6 +195,86 @@ function ExpensesPage() {
   const cancelSubmission = () => {
     setShowConfirmModal(false);
     setPendingSubmission(null);
+  };
+
+  // Handle image upload
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setMessage("Please upload an image file");
+        setTimeout(() => setMessage(""), 3000);
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setMessage("Image size should be less than 5MB");
+        setTimeout(() => setMessage(""), 3000);
+        return;
+      }
+
+      setSelectedImage(file);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Extract expense data from image using Gemini
+  const handleExtractFromImage = async () => {
+    if (!selectedImage) {
+      setMessage("Please select an image first");
+      setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+
+    setIsExtracting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", selectedImage);
+
+      const response = await fetch("/api/gemini/extract-expense", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Auto-fill form fields
+        if (result.data.name) {
+          setExpenseName(result.data.name);
+        }
+        if (result.data.amount) {
+          setExpenseAmount(result.data.amount.toString());
+        }
+
+        setMessage("Expense details extracted successfully!");
+        setTimeout(() => setMessage(""), 3000);
+      } else {
+        setMessage("Failed to extract expense details. Please enter manually.");
+        setTimeout(() => setMessage(""), 3000);
+      }
+    } catch (error) {
+      console.error("Error extracting expense:", error);
+      setMessage("Error processing image. Please try again.");
+      setTimeout(() => setMessage(""), 3000);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // Clear image
+  const handleClearImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
   };
 
   // Format currency for display
@@ -367,6 +452,72 @@ function ExpensesPage() {
                     )}
                   </div>
                   
+                  {/* Image Upload Section (Optional) */}
+                  <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-purple-900">
+                        <ImageIcon className="inline w-4 h-4 mr-1" />
+                        Upload Receipt (Optional)
+                      </label>
+                      {imagePreview && (
+                        <button
+                          type="button"
+                          onClick={handleClearImage}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-purple-700 mb-3">
+                      AI will extract expense details from your receipt
+                    </p>
+
+                    {!imagePreview ? (
+                      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-purple-300 border-dashed rounded-lg cursor-pointer bg-white hover:bg-purple-50 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <Upload className="w-8 h-8 mb-2 text-purple-500" />
+                          <p className="mb-1 text-sm text-purple-700">
+                            <span className="font-semibold">Click to upload</span>
+                          </p>
+                          <p className="text-xs text-purple-600">PNG, JPG (MAX. 5MB)</p>
+                        </div>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                        />
+                      </label>
+                    ) : (
+                      <div className="relative">
+                        <img
+                          src={imagePreview}
+                          alt="Receipt preview"
+                          className="w-full h-32 object-cover rounded-lg border-2 border-purple-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleExtractFromImage}
+                          disabled={isExtracting}
+                          className="w-full mt-2 py-2 px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium flex items-center justify-center"
+                        >
+                          {isExtracting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Extracting...
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="w-4 h-4 mr-2" />
+                              Extract Details
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Form integrated directly in ExpensesPage */}
                   <form onSubmit={handleFormSubmit}>
                     <div className="mb-4">
@@ -382,7 +533,7 @@ function ExpensesPage() {
                         required
                       />
                     </div>
-                    
+
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Expense Amount

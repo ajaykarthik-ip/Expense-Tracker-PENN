@@ -41,9 +41,9 @@ function SideNav({ isSideNavOpen, onClose }) {
     },    
     {
       id: 5,
-      name: "⁠Recurring transactions ",
+      name: "Ai Manager",
       icon: ReceiptText,
-      path: "/dashboard/recurring", 
+      path: "/dashboard/ai", 
     },
   ];
 
